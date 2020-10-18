@@ -13,14 +13,15 @@ const PUBLIC_PATH_WARN =
   '  In some cases, such as in a Node environment, it is safe to ignore this message.\n'
 
 class BugsnagSourceMapUploaderPlugin {
-  constructor (options) {
-    this.apiKey = options.apiKey
-    this.publicPath = options.publicPath
-    this.appVersion = options.appVersion
-    this.codeBundleId = options.codeBundleId
-    this.overwrite = options.overwrite
-    this.endpoint = options.endpoint
-    this.ignoredBundleExtensions = options.ignoredBundleExtensions || [ '.css' ]
+  constructor (build, options) {
+    this.apiKey = build.apiKey
+    this.publicPath = build.publicPath
+    this.appVersion = build.appVersion
+    this.codeBundleId = build.codeBundleId
+    this.overwrite = build.overwrite
+    this.endpoint = build.endpoint
+    this.ignoredBundleExtensions = build.ignoredBundleExtensions || [ '.css' ]
+    this.options = Object.assign({ logLevel: 'warn', logger: console }, options)
     this.validate()
   }
 
@@ -32,6 +33,7 @@ class BugsnagSourceMapUploaderPlugin {
 
   apply (compiler) {
     const plugin = (compilation, cb) => {
+      const logger = this.options.logger;
       const compiler = compilation.compiler
       const stats = compilation.getStats().toJson()
       const publicPath = this.publicPath || stats.publicPath || ''
@@ -42,7 +44,7 @@ class BugsnagSourceMapUploaderPlugin {
         const maps = chunk.files.filter(file => /.+\.map(\?.*)?$/.test(file))
 
         if (!publicPath) {
-          console.warn(`${LOG_PREFIX} ${PUBLIC_PATH_WARN}`)
+          logger.warn(`${LOG_PREFIX} ${PUBLIC_PATH_WARN}`)
         }
 
         return maps.map(map => {
@@ -50,17 +52,17 @@ class BugsnagSourceMapUploaderPlugin {
           const source = chunk.files.find(file => map.replace('.map', '').endsWith(file))
 
           if (!source) {
-            console.warn(`${LOG_PREFIX} no corresponding source found for "${map}" in chunk "${chunk.id}"`)
+            logger.warn(`${LOG_PREFIX} no corresponding source found for "${map}" in chunk "${chunk.id}"`)
             return null
           }
 
           if (!compilation.assets[source]) {
-            console.debug(`${LOG_PREFIX} source asset not found in compilation output "${source}"`)
+            logger.debug(`${LOG_PREFIX} source asset not found in compilation output "${source}"`)
             return null
           }
 
           if (!compilation.assets[map]) {
-            console.debug(`${LOG_PREFIX} source map not found in compilation output "${map}"`)
+            logger.debug(`${LOG_PREFIX} source map not found in compilation output "${map}"`)
             return null
           }
 
@@ -86,7 +88,7 @@ class BugsnagSourceMapUploaderPlugin {
 
       const sourceMaps = stats.chunks.map(chunkToSourceMapDescriptors).reduce((accum, ds) => accum.concat(ds), [])
       parallel(sourceMaps.map(sm => cb => {
-        console.log(`${LOG_PREFIX} uploading sourcemap for "${sm.url}"`)
+        logger.log(`${LOG_PREFIX} uploading sourcemap for "${sm.url}"`)
         upload(this.getUploadOpts(sm), cb)
       }), 10, cb)
     }
